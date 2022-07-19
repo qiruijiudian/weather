@@ -32,10 +32,11 @@ logging.basicConfig(level=logging.DEBUG,  # 控制台打印的日志级别
 class Weather:
     def __init__(self):
         self.init_start = "20220301"
+        self.yesterday_status_file = "sig.txt"
         self.conn_conf = {
             "host": "localhost",
             "user": "root",
-            "password": "299521",
+            "password": "cdqr2008",
             "database": "weather",
             "table": "tianjin"
             } if platform.system() == "Windows" else {
@@ -102,13 +103,16 @@ class Weather:
         """昨日数据是否完整
 
         :param cur: 数据库游标
+        :param query: 是否查询数据库
         :return: True or False
         """
+
         day = datetime.today() - timedelta(days=1)
         day_str = datetime.strftime(datetime.today() - timedelta(days=1), "%Y-%m-%d")
         day_start, day_end = "{} 00:00".format(day_str), "{} 23:59".format(day_str)
         complete_date = [
-            datetime(year=day.year, month=day.month, day=day.day, hour=i, minute=j) for i in range(24) for j in [0, 30]
+            datetime(year=day.year, month=day.month, day=day.day, hour=i, minute=j) for i in range(24) for j in
+            [0, 30]
         ]
 
         sql = "select time, temp, humidity from {} where time between '{}' and '{}'".format(
@@ -121,6 +125,8 @@ class Weather:
             return True
         else:
             return False
+
+
 
     @staticmethod
     def update_new_items(new_items, notify, items, contrast_item):
@@ -180,45 +186,47 @@ class Weather:
             new_items, notify, today = [], "", datetime.today()
 
             latest_data = self.latest_data(cur)
-            if today.hour < 12:
-                yesterday = today - timedelta(days=1)
-                if not self.is_complete_for_yesterday(cur):
-                    yesterday_success, yesterday_items = self.get_data_by_date(yesterday)
-                    if yesterday_success:
-                        new_items, notify = self.update_new_items(new_items, notify, yesterday_items, latest_data)
-                        self.store_data_to_db(new_items, conn, cur)
 
-                        if notify:
-                            self.send_msg("{} 实时数据更新完毕，数据库当前最新时间： {}".format(
-                                notify, self.convert_datetime_to_str_by_step(new_items[-1][0], "m"))
-                            )
+            yesterday = today - timedelta(days=1)
 
-                        new_items, notify = [], ""
-                    else:
-                        self.send_msg(
-                            "获取昨日遗漏数据失败， 当前最新数据时间： {}".format(
-                                self.convert_datetime_to_str_by_step(latest_data[0], "m")
-                            )
+            if not self.is_complete_for_yesterday(cur):
+                yesterday_success, yesterday_items = self.get_data_by_date(yesterday)
+                if yesterday_success:
+                    new_items, notify = self.update_new_items(new_items, notify, yesterday_items, latest_data)
+                    self.store_data_to_db(new_items, conn, cur)
+
+                    if notify:
+                        self.send_msg("{} 实时数据更新完毕，数据库当前最新时间： {}".format(
+                            notify, self.convert_datetime_to_str_by_step(new_items[-1][0], "m"))
                         )
 
-            success, items = self.get_data_by_date(today)
-
-            if success:
-                new_items, notify = self.update_new_items(new_items, notify, items, latest_data)
-
-            else:
-                self.send_msg(
-                    "实时数据更新失败， 当前最新数据时间： {}".format(
-                        self.convert_datetime_to_str_by_step(latest_data[0], "s")
+                    new_items, notify = [], ""
+                else:
+                    self.send_msg(
+                        "获取昨日遗漏数据失败， 当前最新数据时间： {}".format(
+                            self.convert_datetime_to_str_by_step(latest_data[0], "m")
+                        )
                     )
-                )
+            else:
 
-            self.store_data_to_db(new_items, conn, cur)
+                success, items = self.get_data_by_date(today)
 
-            if notify:
-                self.send_msg("{} 实时数据更新完毕，数据库当前最新时间： {}".format(
-                    notify, self.convert_datetime_to_str_by_step(new_items[-1][0], "m"))
-                )
+                if success:
+                    new_items, notify = self.update_new_items(new_items, notify, items, latest_data)
+
+                else:
+                    self.send_msg(
+                        "实时数据更新失败， 当前最新数据时间： {}".format(
+                            self.convert_datetime_to_str_by_step(latest_data[0], "s")
+                        )
+                    )
+
+                self.store_data_to_db(new_items, conn, cur)
+
+                if notify:
+                    self.send_msg("{} 实时数据更新完毕，数据库当前最新时间： {}".format(
+                        notify, self.convert_datetime_to_str_by_step(new_items[-1][0], "m"))
+                    )
 
         except Exception as e:
             now = datetime.today()
@@ -242,6 +250,7 @@ class Weather:
         new_items = []
         try:
             while start <= today:
+                print(start)
                 success, items = self.get_data_by_date(start)
                 if success:
                     new_items.extend(items)
@@ -284,8 +293,8 @@ class Weather:
         :param date_obj: datetime日期对象
         :return: 元祖，第一项为正常True或者异常False，第二项为完整数据
         """
+        time.sleep(1)
         date_str = self.convert_datetime_to_str(date_obj)
-        # date_obj = datetime.strptime(date_str, "%Y%m%d")
         res = []
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36'}
         url = "https://api.weather.com/v1/location/ZBTJ:9:CN/observations/historical.json?apiKey=e1f10a1e78da46f5b10a1e78da96f525&units=e&startDate={0}&endDate={0}".format(date_str)
@@ -354,6 +363,6 @@ class Weather:
         smtp.quit()
 
 
-# Weather().update_history_data()
+Weather().update_history_data()
 # Weather().update_real_time_data()
 
