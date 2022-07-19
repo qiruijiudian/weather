@@ -31,7 +31,7 @@ logging.basicConfig(level=logging.DEBUG,  # 控制台打印的日志级别
 
 class Weather:
     def __init__(self):
-        self.init_start = "20220401"
+        self.init_start = "20220301"
         self.conn_conf = {
             "host": "localhost",
             "user": "root",
@@ -74,7 +74,7 @@ class Weather:
 
     def data_check(self, items):
         if platform.system() == "Windows":
-            dir_path = "./weather/data_check/tianjin"
+            dir_path = "./data_check/tianjin"
         else:
             dir_path = "/home/weather/data_check/tianjin"
         if not os.path.exists(dir_path):
@@ -91,7 +91,7 @@ class Weather:
             res["last"] = [self.convert_datetime_to_str_by_step(items[-1][0], "m"), items[-1][1], items[-1][2]]
 
         name = "{}.json".format(now)
-        while os.path.exists(name):
+        while os.path.exists(os.path.join(dir_path, name)):
             num += 1
             name = "{}({}).json".format(now, num)
 
@@ -355,5 +355,5 @@ class Weather:
 
 
 # Weather().update_history_data()
-Weather().update_real_time_data()
+# Weather().update_real_time_data()
 
