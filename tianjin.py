@@ -150,6 +150,15 @@ class Weather:
 
         return new_items, notify
 
+    @staticmethod
+    def get_update_items(items, notify, contrast_item):
+        res = []
+        for item in items:
+            if item[0] > contrast_item:
+                res.append(item)
+        notify = datetime.strftime(res[-1][0], "%Y-%m-%d")
+        return res, notify
+
     def store_data_to_db(self, items, conn, cur):
 
         # print(items)
@@ -178,6 +187,7 @@ class Weather:
         :param cur: 数据库游标
         :return:
         """
+        print("进入")
         logging.debug("实时数据更新 - 当前执行时间：{}".format(datetime.today().strftime("%Y-%m-%d %H:%M")))
         conn, cur = self.get_conn()
         try:
@@ -186,55 +196,173 @@ class Weather:
             new_items, notify, today = [], "", datetime.today()
 
             latest_data = self.latest_data(cur)
+            latest_date = latest_data[0]
+            start_date = latest_data[0]
 
-            yesterday = today - timedelta(days=1)
+            # yesterday = today - timedelta(days=1)
+            print(latest_data, latest_date, start_date, today)
 
-            if not self.is_complete_for_yesterday(cur):
-                yesterday_success, yesterday_items = self.get_data_by_date(yesterday)
-                if yesterday_success:
-                    new_items, notify = self.update_new_items(new_items, notify, yesterday_items, latest_data)
-                    self.store_data_to_db(new_items, conn, cur)
-
-                    if notify:
-                        self.send_msg("{} 实时数据更新完毕，数据库当前最新时间： {}".format(
-                            notify, self.convert_datetime_to_str_by_step(new_items[-1][0], "m"))
-                        )
-
-                    new_items, notify = [], ""
+            while start_date <= today:
+                print("开始", start_date)
+                prev_success, prev_items = self.get_data_by_date(start_date)
+                if prev_success:
+                    new_items.extend(prev_items)
+                    start_date += timedelta(days=1)
+                    print("成功", prev_items[:10] + prev_items[-10:])
                 else:
                     self.send_msg(
-                        "获取昨日遗漏数据失败， 当前最新数据时间： {}".format(
-                            self.convert_datetime_to_str_by_step(latest_data[0], "m")
+                        "实时数据获取失败， 获取数据日期：{}".format(
+                            self.convert_datetime_to_str_by_step(start_date, "s"),
                         )
                     )
-            else:
-
-                success, items = self.get_data_by_date(today)
-
-                if success:
-                    new_items, notify = self.update_new_items(new_items, notify, items, latest_data)
-
-                else:
-                    self.send_msg(
-                        "实时数据更新失败， 当前最新数据时间： {}".format(
-                            self.convert_datetime_to_str_by_step(latest_data[0], "s")
+                    logging.error(
+                        "实时数据获取失败， 获取数据日期：{}".format(
+                            self.convert_datetime_to_str_by_step(start_date, "s"),
                         )
                     )
 
-                self.store_data_to_db(new_items, conn, cur)
+            # new_items, notify = self.update_new_items(new_items, notify, items, latest_data)
+            print("更新前", new_items[0], new_items[-1])
 
-                if notify:
-                    self.send_msg("{} 实时数据更新完毕，数据库当前最新时间： {}".format(
+            new_items, notify = self.get_update_items(new_items, notify, latest_date)
+
+            print("更新后", new_items[0], new_items[-1])
+
+            self.store_data_to_db(new_items, conn, cur)
+
+            if notify:
+                self.send_msg("{} 实时数据更新完毕，数据库当前最新时间： {}".format(
                         notify, self.convert_datetime_to_str_by_step(new_items[-1][0], "m"))
                     )
 
+            """
+            start = datetime(year=init_start.year, month=init_start.month, day=init_start.day)
+            today = datetime(year=today_obj.year, month=today_obj.month, day=today_obj.day)
+            new_items = []
+            try:
+                while start <= today:
+                    print(start)
+                    success, items = self.get_data_by_date(start)
+                    if success:
+                        new_items.extend(items)
+                        if start == today:
+                            break
+                        start += timedelta(days=1)
+                    else:
+                        self.send_msg(
+                            "历史数据更新失败， 日期：{}, 数据截止日期：{}".format(
+                                self.convert_datetime_to_str_by_step(today_obj, "s"),
+                                self.convert_datetime_to_str_by_step(start, "d")
+                            )
+                        )
+                        logging.error(
+                            "历史数据更新失败，日期：{}, 数据获取截止日期：{}".format(
+                                self.convert_datetime_to_str_by_step(today_obj, "s"),
+                                self.convert_datetime_to_str_by_step(start, "d")
+                            )
+                        )
+                        exit()
+            """
+
+            # if not self.is_complete_for_yesterday(cur):
+            #
+            #     latest_date = latest_data[0]
+            #
+            #     while latest_date <= yesterday:
+            #         prev_success, prev_items = self.get_data_by_date(latest_date)
+            #         if prev_success:
+            #             new_items.extend(prev_items)
+            #             latest_date += timedelta(days=1)
+            #         else:
+            #             self.send_msg(
+            #                 "实时数据更新失败， 获取数据日期：{}".format(
+            #                     self.convert_datetime_to_str_by_step(latest_date, "s"),
+            #                 )
+            #             )
+            #             logging.error(
+            #                 "实时数据更新失败， 获取数据日期：{}".format(
+            #                     self.convert_datetime_to_str_by_step(latest_date, "s"),
+            #                 )
+            #             )
+            #
+            #
+            #
+            #
+            #
+            #     if datetime(yesterday.year, yesterday.month, yesterday.day, 0, 0) < latest_date < datetime(yesterday.year, yesterday.month, yesterday.day, 23, 59):
+            #         yesterday_success, yesterday_items = self.get_data_by_date(yesterday)
+            #         if yesterday_success:
+            #             new_items, notify = self.update_new_items(new_items, notify, yesterday_items, latest_data)
+            #             self.store_data_to_db(new_items, conn, cur)
+            #
+            #             if notify:
+            #                 self.send_msg("{} 实时数据更新完毕，数据库当前最新时间： {}".format(
+            #                     notify, self.convert_datetime_to_str_by_step(new_items[-1][0], "m"))
+            #                 )
+            #
+            #             new_items, notify = [], ""
+            #         else:
+            #             self.send_msg(
+            #                 "获取昨日遗漏数据失败， 当前最新数据时间： {}".format(
+            #                     self.convert_datetime_to_str_by_step(latest_data[0], "m")
+            #                 )
+            #             )
+            #     else:
+            #
+            #         while latest_date <= yesterday:
+            #             print(start)
+            #             success, items = self.get_data_by_date(start)
+            #             if success:
+            #                 new_items.extend(items)
+            #                 if start == today:
+            #                     break
+            #                 start += timedelta(days=1)
+            #             else:
+            #                 self.send_msg(
+            #                     "历史数据更新失败， 日期：{}, 数据截止日期：{}".format(
+            #                         self.convert_datetime_to_str_by_step(today_obj, "s"),
+            #                         self.convert_datetime_to_str_by_step(start, "d")
+            #                     )
+            #                 )
+            #                 logging.error(
+            #                     "历史数据更新失败，日期：{}, 数据获取截止日期：{}".format(
+            #                         self.convert_datetime_to_str_by_step(today_obj, "s"),
+            #                         self.convert_datetime_to_str_by_step(start, "d")
+            #                     )
+            #                 )
+            #                 exit()
+            #         pass
+            # else:
+            #
+            #     success, items = self.get_data_by_date(today)
+            #
+            #     if success:
+            #         new_items, notify = self.update_new_items(new_items, notify, items, latest_data)
+            #
+            #     else:
+            #         self.send_msg(
+            #             "实时数据更新失败， 当前最新数据时间： {}".format(
+            #                 self.convert_datetime_to_str_by_step(latest_data[0], "s")
+            #             )
+            #         )
+            #     # TODO
+            #     # self.store_data_to_db(new_items, conn, cur)
+            #
+            #     if notify:
+            #         self.send_msg("{} 实时数据更新完毕，数据库当前最新时间： {}".format(
+            #             notify, self.convert_datetime_to_str_by_step(new_items[-1][0], "m"))
+            #         )
+
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             now = datetime.today()
             logging.error(
                 "实时数据更新异常：{}, Error: {}".format(self.convert_datetime_to_str_by_step(now, "m"), e))
+            print("异常")
 
         finally:
-            logging.info("===============     Start 数据检查完成 {}     ===============\n".format(
+            logging.info("===============     End 数据检查完成 {}     ===============\n".format(
                 self.convert_datetime_to_str_by_step(datetime.today(), "s"))
             )
             logging.info("*" * 100)
@@ -363,6 +491,6 @@ class Weather:
         smtp.quit()
 
 
-Weather().update_history_data()
-# Weather().update_real_time_data()
+# Weather().update_history_data()
+Weather().update_real_time_data()
 
