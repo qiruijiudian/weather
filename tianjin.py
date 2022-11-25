@@ -219,21 +219,26 @@ class Weather:
                     )
 
             new_items, notify = self.get_update_items(new_items, notify, latest_date)
-            if new_items:
 
+            if not new_items:
+                logging.info("无新增数据， 获取数据日期：{}".format(self.convert_datetime_to_str_by_step(start_date, "s")))
+
+            else:
                 self.store_data_to_db(new_items, conn, cur)
 
-            if notify:
-                self.send_msg("{} 实时数据更新完毕，数据库当前最新时间： {}".format(
-                        notify, self.convert_datetime_to_str_by_step(new_items[-1][0], "m"))
-                    )
+                if notify:
+                    logging.info("成功更新数据， 获取数据日期：{}".format(self.convert_datetime_to_str_by_step(start_date, "s")))
+
+                    if new_items[-1][0].hour == 23 and new_items[-1][0].minute == 30:
+                        self.send_msg("当日数据更新完成：{}，数据库当前最新时间： {}".format(
+                            notify, self.convert_datetime_to_str_by_step(new_items[-1][0], "m"))
+                        )
 
         except Exception as e:
             import traceback
             traceback.print_exc()
             now = datetime.today()
-            logging.error(
-                "实时数据更新异常：{}, Error: {}".format(self.convert_datetime_to_str_by_step(now, "m"), e))
+            logging.error("实时数据更新异常：{}, Error: {}".format(self.convert_datetime_to_str_by_step(now, "m"), e))
             print("异常")
 
         finally:
