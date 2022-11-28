@@ -32,7 +32,7 @@ logging.basicConfig(level=logging.DEBUG,  # 控制台打印的日志级别
 class Weather:
     def __init__(self):
         self.init_start = "20220301"
-        self.yesterday_status_file = "sig.txt"
+        self.yesterday_status_file = "sig/tianjin.txt"
         self.conn_conf = {
             "host": "localhost",
             "user": "root",
@@ -126,8 +126,6 @@ class Weather:
         else:
             return False
 
-
-
     @staticmethod
     def update_new_items(new_items, notify, items, contrast_item):
         """更新需要存储的数据列表
@@ -181,6 +179,18 @@ class Weather:
             now = datetime.today()
             logging.info("无新增数据：{}".format(self.convert_datetime_to_str_by_step(now, "m")))
 
+    @property
+    def yesterday_status(self):
+        with open(self.yesterday_status_file) as f:
+            if "0" in f.read():
+                return False
+            return True
+
+    @yesterday_status.setter
+    def yesterday_status(self, value):
+        with open(self.yesterday_status_file, "w") as f:
+            f.write(str(value))
+
     def update_real_time_data(self):
         """更新每日实时数据
 
@@ -188,7 +198,6 @@ class Weather:
         :param cur: 数据库游标
         :return:
         """
-        print("进入")
         logging.debug("实时数据更新 - 当前执行时间：{}".format(datetime.today().strftime("%Y-%m-%d %H:%M")))
         conn, cur = self.get_conn()
         try:
@@ -205,7 +214,6 @@ class Weather:
                 if prev_success:
                     new_items.extend(prev_items)
                     start_date += timedelta(days=1)
-                    print("成功", prev_items[:10] + prev_items[-10:])
                 else:
                     self.send_msg(
                         "实时数据获取失败， 获取数据日期：{}".format(
@@ -217,6 +225,7 @@ class Weather:
                             self.convert_datetime_to_str_by_step(start_date, "s"),
                         )
                     )
+                    break
 
             new_items, notify = self.get_update_items(new_items, notify, latest_date)
 
@@ -229,17 +238,28 @@ class Weather:
                 if notify:
                     logging.info("成功更新数据， 获取数据日期：{}".format(self.convert_datetime_to_str_by_step(start_date, "s")))
 
-                    if new_items[-1][0].hour == 23 and new_items[-1][0].minute == 30:
-                        self.send_msg("当日数据更新完成：{}，数据库当前最新时间： {}".format(
-                            notify, self.convert_datetime_to_str_by_step(new_items[-1][0], "m"))
-                        )
+                    if datetime.now().hour == 3:
+                        if self.is_complete_for_yesterday(cur):
+                            self.yesterday_status = 1
+                            self.send_msg("INFO：前日({})数据更新完成".format(
+                               self.convert_datetime_to_str_by_step(datetime.now() - timedelta(days=1), "m"))
+                            )
+
+                    if datetime.now().hour == 5:
+
+                        if self.yesterday_status:
+                            self.yesterday_status = 0
+                        else:
+                            self.send_msg("WARNING：前日({})数据更新异常".format(
+                                self.convert_datetime_to_str_by_step(datetime.now() - timedelta(days=1), "m"))
+                            )
 
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            # import traceback
+            # traceback.print_exc()
             now = datetime.today()
             logging.error("实时数据更新异常：{}, Error: {}".format(self.convert_datetime_to_str_by_step(now, "m"), e))
-            print("异常")
+            # print("异常")
 
         finally:
             logging.info("===============     End 数据检查完成 {}     ===============\n".format(

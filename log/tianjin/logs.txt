@@ -1612,3 +1612,22 @@
 2022-11-24 14:41:32,693 - F:/Git/files/github/weather/tianjin.py[line:367] - INFO: ===============     End 数据检查完成 2022-11-24 14:41:32     ===============
 
 2022-11-24 14:41:32,694 - F:/Git/files/github/weather/tianjin.py[line:370] - INFO: ****************************************************************************************************
+2022-11-28 14:34:53,448 - F:/Git/files/github/weather/tianjin.py[line:49] - INFO: ****************************************************************************************************
+2022-11-28 14:34:53,503 - F:/Git/files/github/weather/tianjin.py[line:50] - INFO: ===============     Start 数据检查开始 2022-11-28 14:34:53     ===============
+
+2022-11-28 14:34:53,505 - F:/Git/files/github/weather/tianjin.py[line:201] - DEBUG: 实时数据更新 - 当前执行时间：2022-11-28 14:34
+2022-11-28 14:34:54,631 - F:\anaconda\envs\tool\lib\site-packages\urllib3\connectionpool.py[line:1003] - DEBUG: Starting new HTTPS connection (1): api.weather.com:443
+2022-11-28 14:34:56,489 - F:\anaconda\envs\tool\lib\site-packages\urllib3\connectionpool.py[line:456] - DEBUG: https://api.weather.com:443 "GET /v1/location/ZBTJ:9:CN/observations/historical.json?apiKey=e1f10a1e78da46f5b10a1e78da96f525&units=e&startDate=20221124&endDate=20221124 HTTP/1.1" 200 1713
+2022-11-28 14:34:57,520 - F:\anaconda\envs\tool\lib\site-packages\urllib3\connectionpool.py[line:1003] - DEBUG: Starting new HTTPS connection (1): api.weather.com:443
+2022-11-28 14:34:59,006 - F:\anaconda\envs\tool\lib\site-packages\urllib3\connectionpool.py[line:456] - DEBUG: https://api.weather.com:443 "GET /v1/location/ZBTJ:9:CN/observations/historical.json?apiKey=e1f10a1e78da46f5b10a1e78da96f525&units=e&startDate=20221125&endDate=20221125 HTTP/1.1" 200 1957
+2022-11-28 14:35:00,017 - F:\anaconda\envs\tool\lib\site-packages\urllib3\connectionpool.py[line:1003] - DEBUG: Starting new HTTPS connection (1): api.weather.com:443
+2022-11-28 14:35:01,857 - F:\anaconda\envs\tool\lib\site-packages\urllib3\connectionpool.py[line:456] - DEBUG: https://api.weather.com:443 "GET /v1/location/ZBTJ:9:CN/observations/historical.json?apiKey=e1f10a1e78da46f5b10a1e78da96f525&units=e&startDate=20221126&endDate=20221126 HTTP/1.1" 200 1777
+2022-11-28 14:35:02,871 - F:\anaconda\envs\tool\lib\site-packages\urllib3\connectionpool.py[line:1003] - DEBUG: Starting new HTTPS connection (1): api.weather.com:443
+2022-11-28 14:35:04,596 - F:\anaconda\envs\tool\lib\site-packages\urllib3\connectionpool.py[line:456] - DEBUG: https://api.weather.com:443 "GET /v1/location/ZBTJ:9:CN/observations/historical.json?apiKey=e1f10a1e78da46f5b10a1e78da96f525&units=e&startDate=20221127&endDate=20221127 HTTP/1.1" 200 1751
+2022-11-28 14:35:05,608 - F:\anaconda\envs\tool\lib\site-packages\urllib3\connectionpool.py[line:1003] - DEBUG: Starting new HTTPS connection (1): api.weather.com:443
+2022-11-28 14:35:06,532 - F:\anaconda\envs\tool\lib\site-packages\urllib3\connectionpool.py[line:456] - DEBUG: https://api.weather.com:443 "GET /v1/location/ZBTJ:9:CN/observations/historical.json?apiKey=e1f10a1e78da46f5b10a1e78da96f525&units=e&startDate=20221128&endDate=20221128 HTTP/1.1" 200 1317
+2022-11-28 14:35:06,684 - F:/Git/files/github/weather/tianjin.py[line:174] - INFO: 数据更新 2022-11-24 15:00 - 2022-11-28 13:30
+2022-11-28 14:35:06,684 - F:/Git/files/github/weather/tianjin.py[line:239] - INFO: 成功更新数据， 获取数据日期：2022-11-29 00:00:00
+2022-11-28 14:35:06,684 - F:/Git/files/github/weather/tianjin.py[line:265] - INFO: ===============     End 数据检查完成 2022-11-28 14:35:06     ===============
+
+2022-11-28 14:35:06,684 - F:/Git/files/github/weather/tianjin.py[line:268] - INFO: ****************************************************************************************************
