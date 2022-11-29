@@ -239,6 +239,11 @@ class Weather:
                     logging.info("成功更新数据， 获取数据日期：{}".format(self.convert_datetime_to_str_by_step(start_date, "s")))
 
                     if datetime.now().hour == 3:
+                        if not os.path.exists(self.yesterday_status_file):
+
+                            os.makedirs(self.yesterday_status_file.split("/")[0])
+                            open(self.yesterday_status_file, "w").write("0")
+
                         if self.is_complete_for_yesterday(cur):
                             self.yesterday_status = 1
                             self.send_msg("INFO：前日({})数据更新完成".format(
