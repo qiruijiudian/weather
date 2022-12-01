@@ -3,21 +3,15 @@
 # @Time    : 2022/4/26 10:21
 # @Author  : MAYA
 
-import requests
 import platform
-import pymysql
-import smtplib
 import logging
-import time
 import os
 import json
-from datetime import datetime, timedelta
-from email.header import Header
-from email.mime.text import MIMEText
-from email.utils import parseaddr, formataddr
+from datetime import datetime
 from lxml import etree
 from dateutil.relativedelta import relativedelta
 
+from tools import get_conf, get_conn, program_debug, get_response, send_msg
 
 if platform.system() == "Windows":
     log_file = "./log/cona/logs.txt"
@@ -35,37 +29,15 @@ class Weather:
     def __init__(self):
         # self.init_start = "202012"
         self.init_start = "202201"
-        self.conn_conf = {
-            "host": "localhost",
-            "user": "root",
-            "password": "299521",
-            "database": "weather",
-            "table": "cona"
-        } if platform.system() == "Windows" else {
-            "host": "121.199.48.82",
-            "user": "root",
-            "password": "cdqr2008",
-            "database": "weather",
-            "table": "cona"
-        }
+        self.block = "cona"
+        self.conn_conf = get_conf(self.block)
+        self.is_debug = False
         logging.info("*" * 100)
         logging.info(
             "===============     Start 数据检查开始 {}     ===============\n".format(
                 datetime.today().strftime("%Y-%m-%d %H:%M:%S")
             )
         )
-
-    def get_conn(self):
-        """获取数据库连接
-
-        :return: 数据库连接，数据库游标
-        """
-        conf = self.conn_conf
-        conn = pymysql.connect(
-            host=conf["host"], user=conf["user"], password=conf["password"], database=conf["database"]
-        )
-        cur = conn.cursor()
-        return conn, cur
 
     def latest_data(self, cur):
         """返回数据库中最新的一条数据
@@ -96,46 +68,52 @@ class Weather:
 
     def update_real_time_data(self):
         """更新每日实时数据
-        :param conn: 数据库连接
-        :param cur: 数据库游标
         :return:
         """
         logging.debug("实时数据更新 - 当前执行时间：{}".format(datetime.today().strftime("%Y-%m-%d %H:%M")))
-        conn, cur = self.get_conn()
+        conn, cur = get_conn(self.conn_conf)
 
         # new_items: 新增数据 notify：需要发送邮件通知的日期字符串，空字符串则默认不用通知
         new_items, notify, today = [], "", datetime.today()
         try:
-
             latest_data = self.latest_data(cur)
-
-            success, items = self.get_data_by_date(today)
-
-            if success:
-                for item in items:
-                    if item[0] > latest_data[0]:
-                        new_items.append(item)
-
-            else:
-                self.send_msg(
-                    "实时数据获取失败， 当前最新数据时间： {}".format(
-                        latest_data[0].strftime("%Y-%m-%d")
+            start_date = latest_data[0]
+            while start_date <= today:
+                success, items = self.get_data_by_date(start_date)
+                if success:
+                    new_items.extend([item for item in items if item[0] > latest_data[0]])
+                    if start_date == today:
+                        break
+                    start_date += relativedelta(months=1)
+                else:
+                    send_msg(
+                        "实时数据更新失败， 当前日期：{}, 数据获取截止日期：{}".format(
+                            today.strftime("%Y-%m-%d %H:%M:%S"),
+                            start_date.strftime("%Y-%m")
+                        )
                     )
-                )
+                    logging.error(
+                        "历史数据更新失败，日期：{}, 数据获取截止日期：{}".format(
+                            today.strftime("%Y-%m-%d %H:%M:%S"),
+                            start_date.strftime("%Y-%m")
+                        )
+                    )
+                    break
 
-            notify = self.store_data_to_db(new_items, conn, cur)
+            if not new_items:
+                logging.debug("无新增数据 {} ".format(today.strftime("%Y-%m-%d")))
+            else:
+                notify = self.store_data_to_db(new_items, conn, cur)
 
             if notify:
-                self.send_msg("错那温度 - 实时数据更新完毕，数据库当前最新时间： {}".format(
-                    new_items[-1][0].strftime("%Y-%m-%d"))
-                )
+                send_msg("错那温度 - 实时数据更新完毕，数据库当前最新时间： {}".format(new_items[-1][0].strftime("%Y-%m-%d")))
 
         except Exception as e:
-            logging.error(
-                "实时数据更新异常：{}, Error: {}".format(today.strftime("%Y-%m-%d"), e))
+            program_debug(self.is_debug)
+            logging.error("实时数据更新异常：{}, Error: {}".format(today.strftime("%Y-%m-%d"), e))
 
         finally:
-            logging.info("===============     Start 数据检查完成 {}     ===============\n".format(
+            logging.info("===============     End 数据检查完成 {}     ===============\n".format(
                 today.strftime("%Y-%m-%d"))
             )
             logging.info("*" * 100 + "\n")
@@ -183,8 +161,8 @@ class Weather:
             f.write(json.dumps(res, ensure_ascii=False, indent=4))
 
     def update_history_data(self):
-        logging.debug("历史数据更新 - 当前执行时间：{}".format(datetime.today().strftime("%Y-%m-%d %H:%M")))
-        conn, cur = self.get_conn()
+        logging.info("历史数据更新 - 当前执行时间：{}".format(datetime.today().strftime("%Y-%m-%d %H:%M")))
+        conn, cur = get_conn(self.conn_conf)
         start = datetime.strptime(self.init_start, "%Y%m")
         today = datetime.today()
         new_items = []
@@ -197,7 +175,7 @@ class Weather:
                         break
                     start += relativedelta(months=1)
                 else:
-                    self.send_msg(
+                    send_msg(
                         "历史数据更新失败， 日期：{}, 数据获取截止日期：{}".format(
                             today.strftime("%Y-%m-%d %H:%M:%S"),
                             start.strftime("%Y-%m")
@@ -215,13 +193,13 @@ class Weather:
             if notify:
                 update_start, update_end = new_items[0][0], new_items[-1][0]
 
-                self.send_msg("错那温度 - 历史数据更新完成，数据时间范围：{} - {}".format(
+                send_msg("错那温度 - 历史数据更新完成，数据时间范围：{} - {}".format(
                     update_start.strftime("%Y-%m-%d"),
                     update_end.strftime("%Y-%m-%d")
                 ))
         except Exception as e:
-            logging.error(
-                "历史数据更新异常：{}, Error: {}".format(today.strftime("%Y-%m-%d %H:%M:%S"), e))
+            program_debug(self.is_debug)
+            logging.error("历史数据更新异常：{}, Error: {}".format(today.strftime("%Y-%m-%d %H:%M:%S"), e))
         finally:
             logging.info("===============     Start 数据检查完成 {}     ===============\n".format(
                 today.strftime("%Y-%m-%d %H:%M:%S"))
@@ -229,23 +207,6 @@ class Weather:
             logging.info("*" * 100 + "\n")
             cur.close()
             conn.close()
-
-    @staticmethod
-    def get_html(url, retry=3):
-        headers = {
-            'User-Agent': "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36",
-            'Accept': "*/*",
-            'Cache-Control': "no-cache",
-            'cache-control': "no-cache"
-        }
-        num = 1
-        while num <= retry:
-            try:
-                r = requests.get(url, headers=headers)
-                return r.text
-            except Exception as e:
-                logging.debug("访问异常：{}， 重试第{}次".format(e, num))
-            num += 1
 
     def get_data_by_date(self, date_obj):
         """获取某天的数据
@@ -258,7 +219,7 @@ class Weather:
 
         url = "http://www.tianqihoubao.com/lishi/cuona/month/{}.html".format(date_str)
         try:
-            response = self.get_html(url)
+            response = get_response(url)
             html = etree.HTML(response)
             trs = html.xpath("//table//tr")
             for tr in trs:
@@ -277,30 +238,6 @@ class Weather:
         except Exception as e:
             logging.error("数据获取失败， 错误原因：{} 时间：{}".format(e, datetime.today().strftime("%Y-%m-%d %H:%M:%S")))
             return False, res
-
-    @staticmethod
-    def address_format(s):
-        name, addr = parseaddr(s)
-        return formataddr((Header(name, 'utf-8').encode(), addr))
-
-    def send_msg(self, msg_str):
-        """发送邮件
-        :param msg_str: 信息
-        """
-        from_addr = '3491435752@qq.com'
-        password = 'rcmfbrdqmqkvcjhh'
-        to_addr = '3491435752@qq.com'
-        smtp_server = 'smtp.qq.com'
-        msg = MIMEText(msg_str, 'plain', 'utf-8')
-
-        msg['From'] = self.address_format('栖睿服务器 <%s>' % from_addr)
-        msg['To'] = self.address_format('管理员 <%s>' % to_addr)
-        msg['Subject'] = Header('温度数据获取情况', 'utf-8').encode()
-        smtp = smtplib.SMTP_SSL(smtp_server)
-        smtp.ehlo(smtp_server)
-        smtp.login(from_addr, password)
-        smtp.sendmail(from_addr, [to_addr], msg.as_string())
-        smtp.quit()
 
 
 # Weather().update_history_data()

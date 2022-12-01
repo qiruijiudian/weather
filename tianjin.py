@@ -3,53 +3,30 @@
 # @Time    : 2022/3/24 16:17
 # @Author  : MAYA
 
-import requests
-import platform
+
 import pymysql
-import smtplib
 import logging
 import time
 import os
 import json
 from datetime import datetime, timedelta
-from email.header import Header
-from email.mime.text import MIMEText
-from email.utils import parseaddr, formataddr
 
-
-if platform.system() == "Windows":
-    log_file = "./log/tianjin/logs.txt"
-else:
-    log_file = "/home/weather/log/tianjin/logs.txt"
-
-
-logging.basicConfig(level=logging.DEBUG,  # 控制台打印的日志级别
-                    filename=log_file,
-                    filemode='a+',
-                    format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s')
+from settings import SIG_FILE, DATA_CHECK_PATH
+from tools import get_conf, convert_datetime_to_str_by_step, convert_str_to_datetime, convert_datetime_to_str, \
+    get_response, send_msg, log_conf_init, program_debug
 
 
 class Weather:
     def __init__(self):
+        self.block = "tianjin"
         self.init_start = "20220301"
-        self.yesterday_status_file = "sig/tianjin.txt"
-        self.conn_conf = {
-            "host": "localhost",
-            "user": "root",
-            "password": "cdqr2008",
-            "database": "weather",
-            "table": "tianjin"
-            } if platform.system() == "Windows" else {
-                "host": "121.199.48.82",
-                "user": "root",
-                "password": "cdqr2008",
-                "database": "weather",
-                "table": "tianjin"
-        }
+        self.conn_conf = get_conf(self.block)
+        self.is_debug = False
+        log_conf_init(self.block)
         logging.info("*" * 100)
         logging.info(
             "===============     Start 数据检查开始 {}     ===============\n".format(
-                self.convert_datetime_to_str_by_step(datetime.today(), "s")
+                convert_datetime_to_str_by_step(datetime.today(), "s")
             )
         )
 
@@ -74,39 +51,33 @@ class Weather:
         return cur.fetchone()
 
     def data_check(self, items):
-        if platform.system() == "Windows":
-            dir_path = "./data_check/tianjin"
-        else:
-            dir_path = "/home/weather/data_check/tianjin"
-        if not os.path.exists(dir_path):
-            os.mkdir(dir_path)
+        if not os.path.exists(DATA_CHECK_PATH[self.block]):
+            os.mkdir(DATA_CHECK_PATH[self.block])
 
         now, num = datetime.today().strftime("%Y%m%d_%H"), 1
 
         res = {}
         length = len(items)
-        res["time"] = self.convert_datetime_to_str_by_step(datetime.today(), "m")
+        res["time"] = convert_datetime_to_str_by_step(datetime.today(), "m")
         res["length"] = length
-        res["first"] = [self.convert_datetime_to_str_by_step(items[0][0], "m"), items[0][1], items[0][2]]
+        res["first"] = [convert_datetime_to_str_by_step(items[0][0], "m"), items[0][1], items[0][2]]
         if length >= 2:
-            res["last"] = [self.convert_datetime_to_str_by_step(items[-1][0], "m"), items[-1][1], items[-1][2]]
+            res["last"] = [convert_datetime_to_str_by_step(items[-1][0], "m"), items[-1][1], items[-1][2]]
 
         name = "{}.json".format(now)
-        while os.path.exists(os.path.join(dir_path, name)):
+        while os.path.exists(os.path.join(DATA_CHECK_PATH[self.block], name)):
             num += 1
             name = "{}({}).json".format(now, num)
 
-        with open(os.path.join(dir_path, name), 'w', encoding="utf-8") as f:
+        with open(os.path.join(DATA_CHECK_PATH[self.block], name), 'w', encoding="utf-8") as f:
             f.write(json.dumps(res, ensure_ascii=False, indent=4))
 
     def is_complete_for_yesterday(self, cur):
         """昨日数据是否完整
 
         :param cur: 数据库游标
-        :param query: 是否查询数据库
         :return: True or False
         """
-
         day = datetime.today() - timedelta(days=1)
         day_str = datetime.strftime(datetime.today() - timedelta(days=1), "%Y-%m-%d")
         day_start, day_end = "{} 00:00".format(day_str), "{} 23:59".format(day_str)
@@ -160,8 +131,6 @@ class Weather:
 
     def store_data_to_db(self, items, conn, cur):
 
-        # print(items)
-
         if items:
             # 数据检查
             self.data_check(items)
@@ -172,34 +141,31 @@ class Weather:
             start, end = items[0][0], items[-1][0]
 
             logging.info("数据更新 {} - {}".format(
-                self.convert_datetime_to_str_by_step(start, "m"),
-                self.convert_datetime_to_str_by_step(end, "m"),
+                convert_datetime_to_str_by_step(start, "m"),
+                convert_datetime_to_str_by_step(end, "m"),
             ))
         else:
             now = datetime.today()
-            logging.info("无新增数据：{}".format(self.convert_datetime_to_str_by_step(now, "m")))
+            logging.info("无新增数据：{}".format(convert_datetime_to_str_by_step(now, "m")))
 
     @property
     def yesterday_status(self):
-        with open(self.yesterday_status_file) as f:
+        with open(SIG_FILE[self.block]) as f:
             if "0" in f.read():
                 return False
             return True
 
     @yesterday_status.setter
     def yesterday_status(self, value):
-        with open(self.yesterday_status_file, "w") as f:
+        with open(SIG_FILE[self.block], "w") as f:
             f.write(str(value))
 
     def update_real_time_data(self):
         """更新每日实时数据
-
-        :param conn: 数据库连接
-        :param cur: 数据库游标
         :return:
         """
         logging.debug("实时数据更新 - 当前执行时间：{}".format(datetime.today().strftime("%Y-%m-%d %H:%M")))
-        conn, cur = self.get_conn()
+        conn, cur = get_conn(self.conn_conf)
         try:
 
             # new_items: 新增数据 notify：需要发送邮件通知的日期字符串，空字符串则默认不用通知
@@ -215,14 +181,14 @@ class Weather:
                     new_items.extend(prev_items)
                     start_date += timedelta(days=1)
                 else:
-                    self.send_msg(
+                    send_msg(
                         "实时数据获取失败， 获取数据日期：{}".format(
-                            self.convert_datetime_to_str_by_step(start_date, "s"),
+                            convert_datetime_to_str_by_step(start_date, "s"),
                         )
                     )
                     logging.error(
                         "实时数据获取失败， 获取数据日期：{}".format(
-                            self.convert_datetime_to_str_by_step(start_date, "s"),
+                            convert_datetime_to_str_by_step(start_date, "s"),
                         )
                     )
                     break
@@ -230,24 +196,24 @@ class Weather:
             new_items, notify = self.get_update_items(new_items, notify, latest_date)
 
             if not new_items:
-                logging.info("无新增数据， 获取数据日期：{}".format(self.convert_datetime_to_str_by_step(start_date, "s")))
+                logging.info("无新增数据， 获取数据日期：{}".format(convert_datetime_to_str_by_step(start_date, "s")))
 
             else:
                 self.store_data_to_db(new_items, conn, cur)
 
                 if notify:
-                    logging.info("成功更新数据， 获取数据日期：{}".format(self.convert_datetime_to_str_by_step(start_date, "s")))
+                    logging.info("成功更新数据， 获取数据日期：{}".format(convert_datetime_to_str_by_step(datetime.now(), "s")))
 
                     if datetime.now().hour == 3:
-                        if not os.path.exists(self.yesterday_status_file):
+                        if not os.path.exists(SIG_FILE):
 
-                            os.makedirs(self.yesterday_status_file.split("/")[0])
-                            open(self.yesterday_status_file, "w").write("0")
+                            os.makedirs(SIG_FILE.split("/")[0])
+                            open(SIG_FILE, "w").write("0")
 
                         if self.is_complete_for_yesterday(cur):
                             self.yesterday_status = 1
-                            self.send_msg("INFO：前日({})数据更新完成".format(
-                               self.convert_datetime_to_str_by_step(datetime.now() - timedelta(days=1), "m"))
+                            send_msg("INFO：前日({})数据更新完成".format(
+                               convert_datetime_to_str_by_step(datetime.now() - timedelta(days=1), "m"))
                             )
 
                     if datetime.now().hour == 5:
@@ -255,35 +221,32 @@ class Weather:
                         if self.yesterday_status:
                             self.yesterday_status = 0
                         else:
-                            self.send_msg("WARNING：前日({})数据更新异常".format(
-                                self.convert_datetime_to_str_by_step(datetime.now() - timedelta(days=1), "m"))
+                            send_msg("WARNING：前日({})数据更新异常".format(
+                                convert_datetime_to_str_by_step(datetime.now() - timedelta(days=1), "m"))
                             )
 
         except Exception as e:
-            # import traceback
-            # traceback.print_exc()
+            program_debug(self.is_debug)
             now = datetime.today()
-            logging.error("实时数据更新异常：{}, Error: {}".format(self.convert_datetime_to_str_by_step(now, "m"), e))
-            # print("异常")
+            logging.error("实时数据更新异常：{}, Error: {}".format(convert_datetime_to_str_by_step(now, "m"), e))
 
         finally:
             logging.info("===============     End 数据检查完成 {}     ===============\n".format(
-                self.convert_datetime_to_str_by_step(datetime.today(), "s"))
+                convert_datetime_to_str_by_step(datetime.now(), "s"))
             )
             logging.info("*" * 100)
             cur.close()
             conn.close()
 
     def update_history_data(self):
-        conn, cur = self.get_conn()
-        init_start = self.convert_str_to_datetime(self.init_start)
+        conn, cur = get_conn(self.conn_conf)
+        init_start = convert_str_to_datetime(self.init_start)
         today_obj = datetime.today()
         start = datetime(year=init_start.year, month=init_start.month, day=init_start.day)
         today = datetime(year=today_obj.year, month=today_obj.month, day=today_obj.day)
         new_items = []
         try:
             while start <= today:
-                print(start)
                 success, items = self.get_data_by_date(start)
                 if success:
                     new_items.extend(items)
@@ -291,111 +254,67 @@ class Weather:
                         break
                     start += timedelta(days=1)
                 else:
-                    self.send_msg(
+                    send_msg(
                         "历史数据更新失败， 日期：{}, 数据截止日期：{}".format(
-                            self.convert_datetime_to_str_by_step(today_obj, "s"),
-                            self.convert_datetime_to_str_by_step(start, "d")
+                            convert_datetime_to_str_by_step(today_obj, "s"),
+                            convert_datetime_to_str_by_step(start, "d")
                         )
                     )
                     logging.error(
                         "历史数据更新失败，日期：{}, 数据获取截止日期：{}".format(
-                            self.convert_datetime_to_str_by_step(today_obj, "s"),
-                            self.convert_datetime_to_str_by_step(start, "d")
+                            convert_datetime_to_str_by_step(today_obj, "s"),
+                            convert_datetime_to_str_by_step(start, "d")
                         )
                     )
                     exit()
             self.store_data_to_db(new_items, conn, cur)
-            self.send_msg("历史数据更新完成，数据时间范围：{} - {}".format(
-                self.convert_datetime_to_str_by_step(init_start, "d"),
-                self.convert_datetime_to_str_by_step(start, "d")
+            send_msg("历史数据更新完成，数据时间范围：{} - {}".format(
+                convert_datetime_to_str_by_step(init_start, "d"),
+                convert_datetime_to_str_by_step(start, "d")
             ))
         except Exception as e:
             now = datetime.today()
             logging.error(
-                "历史数据更新异常：{}, Error: {}".format(self.convert_datetime_to_str_by_step(now, "m"), e))
+                "历史数据更新异常：{}, Error: {}".format(convert_datetime_to_str_by_step(now, "m"), e))
         finally:
             logging.info("===============     Start 数据检查完成 {}     ===============\n".format(
-                self.convert_datetime_to_str_by_step(datetime.today(), "s"))
+                convert_datetime_to_str_by_step(datetime.today(), "s"))
             )
             logging.info("*" * 100)
             cur.close()
             conn.close()
 
-    def get_data_by_date(self, date_obj):
+    @staticmethod
+    def get_data_by_date(date_obj):
         """获取某天的数据
         :param date_obj: datetime日期对象
         :return: 元祖，第一项为正常True或者异常False，第二项为完整数据
         """
         time.sleep(1)
-        date_str = self.convert_datetime_to_str(date_obj)
+        date_str = convert_datetime_to_str(date_obj)
         res = []
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36'}
         url = "https://api.weather.com/v1/location/ZBTJ:9:CN/observations/historical.json?apiKey=e1f10a1e78da46f5b10a1e78da96f525&units=e&startDate={0}&endDate={0}".format(date_str)
         try:
-            r = requests.get(url, headers=headers)
-
-            items = json.loads(r.text)
+            r = get_response(url)
+            items = json.loads(r)
             for item in items["observations"]:
                 gmt = time.localtime(item["valid_time_gmt"])
                 hour = gmt.tm_hour
                 minute = gmt.tm_min
                 second = gmt.tm_sec
-                res.append([datetime(date_obj.year, date_obj.month, date_obj.day, hour, minute, second), item["temp"], item["rh"]])
+                res.append(
+                    [
+                        datetime(date_obj.year, date_obj.month, date_obj.day, hour, minute, second), item["temp"],
+                        item["rh"]
+                    ]
+                )
             return True, res
         except Exception as e:
-            logging.error("数据获取失败， 错误原因：{} 时间：{}".format(e, datetime.today().strftime("%Y-%m-%d %H:%M:%S")))
+            logging.error(
+                "数据解析失败， 错误原因：{} 时间：{}".format(e, convert_datetime_to_str_by_step(datetime.today(), "s"))
+            )
             return False, res
-
-    @staticmethod
-    def convert_str_to_datetime(date_str):
-        """将日期字符串转换为datetime对象
-        :param date_str: 日期字符串，如20220301
-        :return: datetime类型日期对象
-        """
-        return datetime.strptime(date_str, "%Y%m%d")
-
-    @staticmethod
-    def convert_datetime_to_str(date_obj):
-        """将datetime对象转化为 年月日的格式如20220301
-        :param date_obj: datetime类型日期对象
-        :return: 日期字符串
-        """
-        return datetime.strftime(date_obj, "%Y%m%d")
-
-    @staticmethod
-    def convert_datetime_to_str_by_step(date_obj, step):
-        if step == "s":
-            return datetime.strftime(date_obj, "%Y-%m-%d %H:%M:%S")
-        elif step == "m":
-            return datetime.strftime(date_obj, "%Y-%m-%d %H:%M")
-        elif step == "d":
-            return datetime.strftime(date_obj, "%Y-%m-%d")
-
-    @staticmethod
-    def address_format(s):
-        name, addr = parseaddr(s)
-        return formataddr((Header(name, 'utf-8').encode(), addr))
-
-    def send_msg(self, msg_str):
-        """发送邮件
-        :param msg_str: 信息
-        """
-        from_addr = '3491435752@qq.com'
-        password = 'rcmfbrdqmqkvcjhh'
-        to_addr = '3491435752@qq.com'
-        smtp_server = 'smtp.qq.com'
-        msg = MIMEText(msg_str, 'plain', 'utf-8')
-
-        msg['From'] = self.address_format('栖睿服务器 <%s>' % from_addr)
-        msg['To'] = self.address_format('管理员 <%s>' % to_addr)
-        msg['Subject'] = Header('温度数据获取情况', 'utf-8').encode()
-        smtp = smtplib.SMTP_SSL(smtp_server)
-        smtp.ehlo(smtp_server)
-        smtp.login(from_addr, password)
-        smtp.sendmail(from_addr, [to_addr], msg.as_string())
-        smtp.quit()
 
 
 # Weather().update_history_data()
 Weather().update_real_time_data()
-
