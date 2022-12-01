@@ -2,18 +2,14 @@
 # -*- coding: utf-8 -*-
 # @Time    : 2022/3/24 16:17
 # @Author  : MAYA
-
-
-import pymysql
-import logging
-import time
 import os
+import time
 import json
+import logging
 from datetime import datetime, timedelta
-
 from settings import SIG_FILE, DATA_CHECK_PATH
 from tools import get_conf, convert_datetime_to_str_by_step, convert_str_to_datetime, convert_datetime_to_str, \
-    get_response, send_msg, log_conf_init, program_debug
+    get_response, send_msg, log_conf_init, program_debug, get_conn
 
 
 class Weather:
@@ -30,27 +26,20 @@ class Weather:
             )
         )
 
-    def get_conn(self):
-        """获取数据库连接
-
-        :return: 数据库连接，数据库游标
-        """
-        conf = self.conn_conf
-        conn = pymysql.connect(
-            host=conf["host"], user=conf["user"], password=conf["password"], database=conf["database"]
-        )
-        cur = conn.cursor()
-        return conn, cur
-
     def latest_data(self, cur):
-        """返回数据库中最新的一条数据
+        """
+        返回数据库中最新的一条数据
         :param cur: 数据库游标
-        :return: 组新的一条数据
+        :return: 最新的一条数据
         """
         cur.execute("select time, temp, humidity from {} order by time desc limit 1".format(self.conn_conf["table"]))
         return cur.fetchone()
 
     def data_check(self, items):
+        """
+        数据检查
+        :param items: 数据集
+        """
         if not os.path.exists(DATA_CHECK_PATH[self.block]):
             os.mkdir(DATA_CHECK_PATH[self.block])
 
@@ -73,10 +62,10 @@ class Weather:
             f.write(json.dumps(res, ensure_ascii=False, indent=4))
 
     def is_complete_for_yesterday(self, cur):
-        """昨日数据是否完整
-
+        """
+        昨日数据是否完整
         :param cur: 数据库游标
-        :return: True or False
+        :return: True（是） or False（否）
         """
         day = datetime.today() - timedelta(days=1)
         day_str = datetime.strftime(datetime.today() - timedelta(days=1), "%Y-%m-%d")
@@ -121,6 +110,13 @@ class Weather:
 
     @staticmethod
     def get_update_items(items, notify, contrast_item):
+        """
+        需要更新的数据
+        :param items: 数据集
+        :param notify: 需要邮件提示的日期字符串
+        :param contrast_item: 数据库最新数据
+        :return: 待更新的数据集，提示字符串
+        """
         res = []
         for item in items:
             if item[0] > contrast_item:
@@ -130,6 +126,12 @@ class Weather:
         return res, notify
 
     def store_data_to_db(self, items, conn, cur):
+        """
+        存储数据至数据库
+        :param items: 数据集
+        :param conn: 数据库连接
+        :param cur: 游标
+        """
 
         if items:
             # 数据检查
@@ -161,9 +163,8 @@ class Weather:
             f.write(str(value))
 
     def update_real_time_data(self):
-        """更新每日实时数据
-        :return:
-        """
+        # 更新每日实时数据
+
         logging.debug("实时数据更新 - 当前执行时间：{}".format(datetime.today().strftime("%Y-%m-%d %H:%M")))
         conn, cur = get_conn(self.conn_conf)
         try:
@@ -239,6 +240,7 @@ class Weather:
             conn.close()
 
     def update_history_data(self):
+        # 更新历史数据
         conn, cur = get_conn(self.conn_conf)
         init_start = convert_str_to_datetime(self.init_start)
         today_obj = datetime.today()

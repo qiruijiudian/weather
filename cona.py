@@ -2,28 +2,14 @@
 # -*- coding: utf-8 -*-
 # @Time    : 2022/4/26 10:21
 # @Author  : MAYA
-
-import platform
-import logging
 import os
 import json
-from datetime import datetime
+import logging
 from lxml import etree
-from dateutil.relativedelta import relativedelta
-
+from datetime import datetime
 from settings import DATA_CHECK_PATH
-from tools import get_conf, get_conn, program_debug, get_response, send_msg
-
-if platform.system() == "Windows":
-    log_file = "./log/cona/logs.txt"
-else:
-    log_file = "/home/weather/log/cona/logs.txt"
-
-
-logging.basicConfig(level=logging.DEBUG,  # 控制台打印的日志级别
-                    filename=log_file,
-                    filemode='a+',
-                    format='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s')
+from dateutil.relativedelta import relativedelta
+from tools import get_conf, get_conn, program_debug, get_response, send_msg, log_conf_init
 
 
 class Weather:
@@ -33,6 +19,7 @@ class Weather:
         self.block = "cona"
         self.conn_conf = get_conf(self.block)
         self.is_debug = False
+        log_conf_init(self.block)
         logging.info("*" * 100)
         logging.info(
             "===============     Start 数据检查开始 {}     ===============\n".format(
@@ -49,7 +36,13 @@ class Weather:
         return cur.fetchone()
 
     def store_data_to_db(self, items, conn, cur):
-
+        """
+        存储数据至数据库
+        :param items: 数据集
+        :param conn: 数据库连接
+        :param cur: 游标
+        :return: 是否成功 True or False
+        """
         if items:
 
             sql = "insert into {}(time, temp) values (%s, %s)".format(self.conn_conf["table"])
@@ -68,9 +61,7 @@ class Weather:
             return False
 
     def update_real_time_data(self):
-        """更新每日实时数据
-        :return:
-        """
+        """更新每日实时数据"""
         logging.debug("实时数据更新 - 当前执行时间：{}".format(datetime.today().strftime("%Y-%m-%d %H:%M")))
         conn, cur = get_conn(self.conn_conf)
 
@@ -156,6 +147,7 @@ class Weather:
             f.write(json.dumps(res, ensure_ascii=False, indent=4))
 
     def update_history_data(self):
+        # 更新历史数据
         logging.info("历史数据更新 - 当前执行时间：{}".format(datetime.today().strftime("%Y-%m-%d %H:%M")))
         conn, cur = get_conn(self.conn_conf)
         start = datetime.strptime(self.init_start, "%Y%m")
@@ -204,7 +196,7 @@ class Weather:
             conn.close()
 
     def get_data_by_date(self, date_obj):
-        """获取某天的数据
+        """获取某个日期的数据
         :param date_obj: datetime日期对象
         :return: 元祖，第一项为正常True或者异常False，第二项为完整数据
         """
