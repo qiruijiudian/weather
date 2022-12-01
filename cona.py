@@ -11,6 +11,7 @@ from datetime import datetime
 from lxml import etree
 from dateutil.relativedelta import relativedelta
 
+from settings import DATA_CHECK_PATH
 from tools import get_conf, get_conn, program_debug, get_response, send_msg
 
 if platform.system() == "Windows":
@@ -120,27 +121,21 @@ class Weather:
             cur.close()
             conn.close()
 
-    @staticmethod
-    def data_check(items, date_obj):
+    def data_check(self, items, date_obj):
         """数据检查
         :param items: 数据集合
         :param date_obj: 日期对象（哪一个月的数据）
         """
+        if not os.path.exists(DATA_CHECK_PATH[self.block]):
+            os.mkdir(DATA_CHECK_PATH[self.block])
+
         start_obj, end_obj = items[0][0], items[-1][0]
         start, end = start_obj.strftime("%Y-%m-%d"), end_obj.strftime("%Y-%m-%d")
         start_value, end_value = items[0][1], items[-1][1]
         days_items = [[item[0].strftime("%Y-%m-%d"), item[1]] for item in items]
 
-        if platform.system() == "Windows":
-            dir_path = "./data_check/cona"
-        else:
-            dir_path = "/home/weather/data_check/cona"
-
-        if not os.path.exists(dir_path):
-            os.mkdir(dir_path)
-
         name, num = "{}.json".format(date_obj.strftime("%Y%m")), 1
-        while os.path.exists(os.path.join(dir_path, name)):
+        while os.path.exists(os.path.join(DATA_CHECK_PATH[self.block], name)):
             num += 1
             name = "{}({}).json".format(start_obj.strftime("%Y%m"), num)
 
@@ -157,7 +152,7 @@ class Weather:
             "items": days_items
         }
 
-        with open(os.path.join(dir_path, name), "w", encoding="utf-8") as f:
+        with open(os.path.join(DATA_CHECK_PATH[self.block], name), "w", encoding="utf-8") as f:
             f.write(json.dumps(res, ensure_ascii=False, indent=4))
 
     def update_history_data(self):
