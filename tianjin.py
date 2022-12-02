@@ -206,10 +206,10 @@ class Weather:
                     logging.info("成功更新数据， 获取数据日期：{}".format(convert_datetime_to_str_by_step(datetime.now(), "s")))
 
                     if datetime.now().hour == 3:
-                        if not os.path.exists(SIG_FILE):
+                        if not os.path.exists(SIG_FILE[self.block]):
 
-                            os.makedirs(SIG_FILE.split("/")[0])
-                            open(SIG_FILE, "w").write("0")
+                            os.makedirs(SIG_FILE[self.block].split("/")[0])
+                            open(SIG_FILE[self.block], "w").write("0")
 
                         if self.is_complete_for_yesterday(cur):
                             self.yesterday_status = 1
